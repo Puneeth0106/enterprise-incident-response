@@ -1,11 +1,15 @@
 # CloudOps Sentinel — Enterprise Incident Response Self-RAG Copilot
 
-> Course project imported from Krish Naik Academy. Original software copyright (c) 2026 BAPPY AHMED, MIT license. This repository preserves the course implementation with publication cleanup; it is not presented as original work by the repository owner.
-> Validation: Python syntax and notebook JSON checked. Live API, ingestion, Docker, and end-to-end behavior have not been tested.
+An AI copilot for investigating cloud incidents with operational runbooks, corrective retrieval, and persistent conversation context. The application combines **LangGraph**, **Pinecone**, **OpenAI**, and **FastAPI** to turn incident questions into answers grounded in retrieved evidence.
 
-A production-style **Self-RAG** demo for cloud operations and incident response. It searches private operational knowledge in Pinecone first, self-grades the retrieved evidence, corrects weak retrieval/generation, and uses **internet search only when the private knowledge base is insufficient**.
+## Engineering capabilities
 
-The project also demonstrates **LangGraph SQLite persistence memory** so follow-up questions can reuse the same incident context through a stable `thread_id`.
+- **Self-correcting retrieval:** grade document relevance, rewrite weak queries, and evaluate answer support and usefulness.
+- **Knowledge ingestion:** load PDF, TXT, Markdown, and DOCX files, split them into chunks, and index them with stable identifiers.
+- **Stateful workflows:** preserve incident context across follow-up questions with LangGraph and SQLite checkpoints.
+- **Search fallback:** use Tavily when internal retrieval does not provide sufficient evidence.
+- **Application integration:** connect chat, document uploads, audit history, and a browser interface through FastAPI.
+- **Deployment packaging:** provide a Dockerfile and environment-based service configuration.
 
 ## Architecture
 
@@ -44,7 +48,7 @@ SQLite Checkpoint / Memory
 - **OpenAI `text-embedding-3-large`** — embeddings for private operational documents
 - **Pinecone** — private runbooks/SOPs/postmortems knowledge base
 - **Tavily** — controlled internet-search fallback
-- **SQLite** — LangGraph persistence memory + simple audit database for the demo
+- **SQLite** — LangGraph persistence memory + incident audit storage
 - **FastAPI** — application/API backend
 - **HTML/CSS/JavaScript** — incident-command-center UI with document upload
 - **Docker** — deployment packaging
@@ -193,7 +197,7 @@ EXISTING Pinecone Index
 EXISTING Namespace
 ```
 
-So you can prepare the initial knowledge base before recording, then upload another runbook live and immediately ask questions against the expanded knowledge base.
+New runbooks can be added through the interface without using a separate ingestion workflow.
 
 ## LangGraph SQLite persistence memory
 
@@ -203,7 +207,7 @@ Every browser incident session has a persistent `thread_id`. The LangGraph workf
 data/langgraph_memory.sqlite
 ```
 
-Example video demo:
+Example incident conversation:
 
 **Question 1**
 
@@ -215,11 +219,11 @@ Example video demo:
 
 For the second message, the `contextualize` node uses the persisted incident context and converts the follow-up into a standalone operational question before continuing through Self-RAG.
 
-SQLite is intentionally used for the local demonstration. In a production implementation, you can explain that this persistence layer can be replaced with PostgreSQL or another production-grade LangGraph checkpointer/database.
+SQLite provides local persistence. A production deployment would require a separate review of storage, concurrency, authentication, and operational controls.
 
-## Recommended YouTube flow
+## Example workflows
 
-### Demo A — Existing Pinecone knowledge
+### A — Existing Pinecone knowledge
 
 Ask:
 
@@ -227,7 +231,7 @@ Ask:
 
 Expected route: **Private Runbooks**.
 
-### Demo B — Persistent memory
+### B — Persistent memory
 
 Immediately ask:
 
@@ -235,11 +239,11 @@ Immediately ask:
 
 The same `thread_id` should reuse the previous incident context.
 
-### Demo C — Upload new operational knowledge
+### C — Upload new operational knowledge
 
 Upload a new PDF/MD/DOCX from the UI. The status will show how many chunks were added to the existing namespace. Then ask a question whose answer exists only in the newly uploaded document.
 
-### Demo D — Internet-search fallback
+### D — Internet-search fallback
 
 Ask about a technical issue that is not covered by any private runbook. Self-RAG first tries the private KB, grades the evidence, rewrites if necessary, and then transitions to **Internet Search** when internal evidence remains insufficient.
 
@@ -253,3 +257,9 @@ The application and ingestion script both import `src/vectorstore.py`. That mean
 - Pinecone namespace
 
 This prevents a common RAG mistake where offline ingestion and runtime retrieval use different embeddings or different namespaces.
+
+## Validation status
+
+Python syntax and notebook JSON checks passed. Live API calls, ingestion, Docker execution, and end-to-end behavior have not yet been verified.
+
+I learned from Bappy Ahmed, whose original work is MIT-licensed, through Krish Naik Academy.
