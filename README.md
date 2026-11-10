@@ -1,4 +1,4 @@
-# CloudOps Sentinel — Enterprise Incident Response Self-RAG Copilot
+# CloudOps Sentinel: Enterprise Incident Response Self-RAG Copilot
 
 An AI copilot for investigating cloud incidents with operational runbooks, corrective retrieval, and persistent conversation context. The application combines **LangGraph**, **Pinecone**, **OpenAI**, and **FastAPI** to turn incident questions into answers grounded in retrieved evidence.
 
@@ -43,15 +43,15 @@ SQLite Checkpoint / Memory
 
 ## Tech stack
 
-- **LangGraph** — Self-RAG workflow, conditional routing, persistent thread state
-- **OpenAI `gpt-5-mini`** — routing, query rewriting, generation, relevance grading, IsSUP and IsUSE
-- **OpenAI `text-embedding-3-large`** — embeddings for private operational documents
-- **Pinecone** — private runbooks/SOPs/postmortems knowledge base
-- **Tavily** — controlled internet-search fallback
-- **SQLite** — LangGraph persistence memory + incident audit storage
-- **FastAPI** — application/API backend
-- **HTML/CSS/JavaScript** — incident-command-center UI with document upload
-- **Docker** — deployment packaging
+- **LangGraph**: Self-RAG workflow, conditional routing, persistent thread state
+- **OpenAI `gpt-5-mini`**: routing, query rewriting, generation, relevance grading, IsSUP and IsUSE
+- **OpenAI `text-embedding-3-large`**: embeddings for private operational documents
+- **Pinecone**: private runbooks/SOPs/postmortems knowledge base
+- **Tavily**: controlled internet-search fallback
+- **SQLite**: LangGraph persistence memory + incident audit storage
+- **FastAPI**: application/API backend
+- **HTML/CSS/JavaScript**: incident-command-center UI with document upload
+- **Docker**: deployment packaging
 
 ## Project structure
 
@@ -223,7 +223,7 @@ SQLite provides local persistence. A production deployment would require a separ
 
 ## Example workflows
 
-### A — Existing Pinecone knowledge
+### A: Existing Pinecone knowledge
 
 Ask:
 
@@ -231,7 +231,7 @@ Ask:
 
 Expected route: **Private Runbooks**.
 
-### B — Persistent memory
+### B: Persistent memory
 
 Immediately ask:
 
@@ -239,11 +239,11 @@ Immediately ask:
 
 The same `thread_id` should reuse the previous incident context.
 
-### C — Upload new operational knowledge
+### C: Upload new operational knowledge
 
 Upload a new PDF/MD/DOCX from the UI. The status will show how many chunks were added to the existing namespace. Then ask a question whose answer exists only in the newly uploaded document.
 
-### D — Internet-search fallback
+### D: Internet-search fallback
 
 Ask about a technical issue that is not covered by any private runbook. Self-RAG first tries the private KB, grades the evidence, rewrites if necessary, and then transitions to **Internet Search** when internal evidence remains insufficient.
 
