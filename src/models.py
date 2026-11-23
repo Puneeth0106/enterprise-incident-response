@@ -1,9 +1,14 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=2, max_length=2000)
     thread_id: str = Field(..., min_length=3, max_length=120)
+
+    @field_validator("question", "thread_id", mode="before")
+    @classmethod
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 class SourceItem(BaseModel):
     type: Literal["internal", "web"]
