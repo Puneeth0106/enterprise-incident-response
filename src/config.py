@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 from dotenv import load_dotenv
 
@@ -32,6 +32,10 @@ class Settings(BaseModel):
     max_retrieval_rewrites: int = int(os.getenv("MAX_RETRIEVAL_REWRITES", "2"))
     max_web_rewrites: int = int(os.getenv("MAX_WEB_REWRITES", "2"))
     database_path: str = os.getenv("DATABASE_PATH", "data/audit.db")
+    max_upload_bytes: int = Field(
+        default_factory=lambda: int(os.getenv("MAX_UPLOAD_BYTES", "10485760")),
+        gt=0, le=104857600, validate_default=True,
+    )
 
     @property
     def database_file(self) -> Path:

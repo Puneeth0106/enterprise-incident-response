@@ -73,7 +73,7 @@ CloudOps-Sentinel-Enterprise-Incident-Response-Self-RAG-Copilot/
 ├── templates/index.html
 ├── static/styles.css
 ├── static/app.js
-├── uploads/                   # documents uploaded through the UI
+├── uploads/                   # temporary request-local ingestion staging
 ├── data/                      # SQLite persistence files
 ├── requirements.txt
 ├── Dockerfile
@@ -260,6 +260,38 @@ This prevents a common RAG mistake where offline ingestion and runtime retrieval
 
 ## Validation status
 
-Python syntax and notebook JSON checks passed. Live API calls, ingestion, Docker execution, and end-to-end behavior have not yet been verified.
+Run credential-free checks with Python 3.11 or 3.12:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pip check
+python -m unittest discover -s tests -v
+```
+
+The tests import the real app and use in-process HTTP requests and disposable
+SQLite audit databases. Model execution and upload ingestion are replaced with
+test doubles. They cover chat validation and audit persistence, page/assets/health,
+upload bounds, concurrent same-name staging, and cleanup on success and failure.
+GitHub Actions runs the same checks on Python 3.11 and 3.12.
+
+Uploads accept PDF, TXT, MD and DOCX. `MAX_UPLOAD_BYTES` defaults to 10485760
+(10 MiB), with a supported range of 1 to 104857600 bytes. Empty files return 400;
+files over the limit return 413 before ingestion. Each upload uses a separate
+temporary directory, preserves the basename for chunk identity, and removes its
+staged file after ingestion, including failure paths. Files already in `uploads/`
+are left in place. Backend chat/ingestion errors return a generic message and are
+logged on the server.
+
+The staging limit is applied after multipart parsing. Configure a request-body
+limit at the deployment proxy as well. It does not bound extracted text, provider
+writes, or concurrent requests. Same-name requests cannot overwrite staging files,
+but may still update the same vector IDs. A failed ingestion may leave partial
+provider writes. Source metadata may refer to a staging path that no longer exists;
+the document basename remains available for citations.
+
+Live OpenAI/Pinecone/Tavily calls, extraction/indexing, graph checkpoints, browser
+interaction, Docker execution and end-to-end behavior remain unverified. The API
+has no authentication and audit history is shared. See the
+[delivery plan](docs/delivery-plan.md) for the remaining workflow segments.
 
 I learned from Bappy Ahmed, whose original work is MIT-licensed, through Krish Naik Academy.
