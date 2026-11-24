@@ -25,3 +25,13 @@ or concurrent request count. The deployment proxy must bound request bodies.
 Before each PR, inspect remote main, all PR states and merged branches. Record
 opened PR count, verification and remaining scope in the automation ledger and
 brain project index. Never open a fifth workflow PR.
+
+## Progress
+
+- Segment 1 merged in PR 1: bounded uploads, API checks and Python CI.
+- Segment 2: real SQLite checkpoint regressions and deterministic workflow tests;
+  follow-up retrieval uses the rewritten question, unsupported answers stop at the
+  revision budget, zero disables web fallback, retry settings accept 0 through 5,
+  and the graph step limit supports the full configured budget.
+- Next: segment 3 for ingestion and container startup. Keep live-provider,
+  authentication, same-thread concurrency and deployment limits explicit.

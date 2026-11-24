@@ -103,7 +103,7 @@ def contextualize_question(state: RAGState):
     out = _llm().with_structured_output(QueryRewrite).invoke(
         prompt.format_messages(history=history, question=user_question)
     )
-    return {"question": out.query, "trace": _trace(state, f"Memory contextualized question: {out.query}")}
+    return {"question": out.query, "retrieval_query": out.query, "trace": _trace(state, f"Memory contextualized question: {out.query}")}
 
 
 def commit_memory(state: RAGState):
@@ -172,7 +172,7 @@ def route_after_relevance(state: RAGState) -> Literal["generate", "rewrite_inter
         return "no_answer"
     if state.get("retrieval_rewrites", 0) < s.max_retrieval_rewrites:
         return "rewrite_internal"
-    return "rewrite_web"
+    return "rewrite_web" if s.max_web_rewrites > 0 else "no_answer"
 
 
 def rewrite_internal_query(state: RAGState):
@@ -229,11 +229,11 @@ def check_support(state: RAGState):
     return {"support_status": out.status, "evidence": out.evidence, "trace": _trace(state, f"Support check: {out.status}")}
 
 
-def route_after_support(state: RAGState) -> Literal["usefulness", "revise"]:
+def route_after_support(state: RAGState) -> Literal["usefulness", "revise", "no_answer"]:
     if state.get("support_status") == "fully_supported":
         return "usefulness"
     if state.get("support_retries", 0) >= get_settings().max_support_retries:
-        return "usefulness"
+        return "no_answer"
     return "revise"
 
 
@@ -262,17 +262,27 @@ def route_after_usefulness(state: RAGState) -> Literal["end", "rewrite_internal"
     if state.get("source_mode") == "internal":
         if state.get("retrieval_rewrites", 0) < s.max_retrieval_rewrites:
             return "rewrite_internal"
-        return "rewrite_web"
+        return "rewrite_web" if s.max_web_rewrites > 0 else "no_answer"
     if state.get("source_mode") == "web" and state.get("web_rewrites", 0) < s.max_web_rewrites:
         return "rewrite_web"
     return "no_answer"
 
 
 def no_answer(state: RAGState):
-    return {"answer": "I could not find enough reliable runbook or external evidence to recommend a safe troubleshooting action.", "source_mode": "none", "trace": _trace(state, "Stopped: no reliable answer found")}
+    return {
+        "answer": "I could not find enough reliable runbook or external evidence to recommend a safe troubleshooting action.",
+        "source_mode": "none",
+        "relevant_docs": [],
+        "context": "",
+        "evidence": [],
+        "usefulness": "",
+        "use_reason": "",
+        "trace": _trace(state, "Stopped: no reliable answer found"),
+    }
 
 
-def build_graph():
+def build_graph(checkpointer=None):
+    """Compile the workflow; callers supplying a saver own its connection lifetime."""
     g = StateGraph(RAGState)
     g.add_node("contextualize", contextualize_question)
     g.add_node("decide_retrieval", decide_retrieval)
@@ -301,13 +311,16 @@ def build_graph():
     g.add_edge("rewrite_web", "web_search")
     g.add_edge("web_search", "grade")
     g.add_edge("generate", "support")
-    g.add_conditional_edges("support", route_after_support, {"usefulness":"usefulness", "revise":"revise"})
+    g.add_conditional_edges("support", route_after_support, {"usefulness":"usefulness", "revise":"revise", "no_answer":"no_answer"})
     g.add_edge("revise", "support")
     g.add_conditional_edges("usefulness", route_after_usefulness, {
         "end":"commit_memory", "rewrite_internal":"rewrite_internal", "rewrite_web":"rewrite_web", "no_answer":"no_answer"
     })
     g.add_edge("no_answer", "commit_memory")
     g.add_edge("commit_memory", END)
+
+    if checkpointer is not None:
+        return g.compile(checkpointer=checkpointer)
 
     db_path = Path(__file__).resolve().parents[1] / "data" / "langgraph_memory.sqlite"
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -363,7 +376,13 @@ def run_self_rag(question: str, thread_id: str) -> dict:
         "used_web_search": False,
         "trace": [],
     }
-    result = _graph.invoke(initial, config={"configurable": {"thread_id": thread_id}, "recursion_limit": 60})
+    settings = get_settings()
+    # Each evidence attempt may include generation, support revisions and grading.
+    # Leave room for all configured internal and web attempts plus memory nodes.
+    recursion_limit = 20 + (settings.max_retrieval_rewrites + settings.max_web_rewrites + 1) * (
+        8 + 2 * settings.max_support_retries
+    )
+    result = _graph.invoke(initial, config={"configurable": {"thread_id": thread_id}, "recursion_limit": recursion_limit})
     mode = result.get("source_mode", "none")
     route = {"internal":"Private Runbooks", "web":"Internet Search", "direct":"General Knowledge", "none":"No Reliable Evidence"}.get(mode, mode)
     return {

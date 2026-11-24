@@ -268,7 +268,7 @@ python -m pip check
 python -m unittest discover -s tests -v
 ```
 
-The tests import the real app and use in-process HTTP requests and disposable
+The API tests import the real app and use in-process HTTP requests and disposable
 SQLite audit databases. Model execution and upload ingestion are replaced with
 test doubles. They cover chat validation and audit persistence, page/assets/health,
 upload bounds, concurrent same-name staging, and cleanup on success and failure.
@@ -289,8 +289,32 @@ but may still update the same vector IDs. A failed ingestion may leave partial
 provider writes. Source metadata may refer to a staging path that no longer exists;
 the document basename remains available for citations.
 
-Live OpenAI/Pinecone/Tavily calls, extraction/indexing, graph checkpoints, browser
-interaction, Docker execution and end-to-end behavior remain unverified. The API
+Workflow tests execute the compiled LangGraph with real disposable SQLite
+checkpoints and deterministic model, retriever and search doubles. They verify
+reopened checkpoint history, thread separation, contextualized follow-up retrieval,
+per-turn state reset, source citations, direct/internal/web/refusal routes, provider
+failure without a completed memory turn, and bounded revisions and searches.
+These tests verify control flow and persistence, not model judgment quality.
+
+`MAX_SUPPORT_RETRIES`, `MAX_RETRIEVAL_REWRITES` and `MAX_WEB_REWRITES` accept
+integers from 0 to 5, defaulting to 2. Support retries count answer revisions;
+internal rewrites are additional retrievals after the first attempt. Web rewrites
+count total search attempts, so zero disables web fallback. The graph step limit
+scales with these budgets. If support remains partial or absent after the revision
+budget, the workflow returns **No Reliable Evidence** before usefulness grading.
+A refusal clears abandoned sources and usefulness labels. Direct general-knowledge
+answers bypass evidence grading by design. `used_web_search` records entry into
+the web-search path, including when the search key is missing.
+
+Checkpoint memory is keyed only by the caller-supplied thread ID. Thread
+separation is not authorization: anyone who knows an ID can reuse its history.
+Tests use sequential calls; simultaneous requests for the same thread, checkpoint
+retention, production database recovery and multi-worker behavior remain unverified.
+Provider failures can leave intermediate checkpoints, but do not add a completed
+conversation turn; a new invocation resets transient state.
+
+Live OpenAI/Pinecone/Tavily calls, extraction/indexing, browser interaction,
+Docker execution and end-to-end behavior remain unverified. The API
 has no authentication and audit history is shared. See the
 [delivery plan](docs/delivery-plan.md) for the remaining workflow segments.
 

@@ -28,9 +28,18 @@ class Settings(BaseModel):
 
     # Self-RAG controls
     top_k: int = int(os.getenv("TOP_K", "5"))
-    max_support_retries: int = int(os.getenv("MAX_SUPPORT_RETRIES", "2"))
-    max_retrieval_rewrites: int = int(os.getenv("MAX_RETRIEVAL_REWRITES", "2"))
-    max_web_rewrites: int = int(os.getenv("MAX_WEB_REWRITES", "2"))
+    max_support_retries: int = Field(
+        default_factory=lambda: int(os.getenv("MAX_SUPPORT_RETRIES", "2")),
+        ge=0, le=5, validate_default=True,
+    )
+    max_retrieval_rewrites: int = Field(
+        default_factory=lambda: int(os.getenv("MAX_RETRIEVAL_REWRITES", "2")),
+        ge=0, le=5, validate_default=True,
+    )
+    max_web_rewrites: int = Field(
+        default_factory=lambda: int(os.getenv("MAX_WEB_REWRITES", "2")),
+        ge=0, le=5, validate_default=True,
+    )
     database_path: str = os.getenv("DATABASE_PATH", "data/audit.db")
     max_upload_bytes: int = Field(
         default_factory=lambda: int(os.getenv("MAX_UPLOAD_BYTES", "10485760")),
