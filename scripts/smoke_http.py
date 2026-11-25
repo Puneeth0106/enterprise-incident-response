@@ -15,7 +15,7 @@ def check(base_url):
                 assert json.load(response) == {
                     'status': 'ok', 'service': 'cloudops-sentinel-self-rag'}
             break
-        except (URLError, TimeoutError):
+        except (URLError, TimeoutError, ConnectionError):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.5)
