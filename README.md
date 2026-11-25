@@ -13,33 +13,41 @@ An AI copilot for investigating cloud incidents with operational runbooks, corre
 
 ## Architecture
 
-```text
-User Incident / Follow-up
-        ↓
-LangGraph SQLite Memory
-        ↓
-Contextualize Follow-up
-        ↓
-Decide Retrieval
-        ↓
-Private Pinecone Knowledge Base
-        ↓
-Grade Retrieved Documents
-   ┌────┴───────────────┐
-Relevant             Weak / Missing
-   ↓                      ↓
-Generate              Rewrite Query
-   ↓                      ↓
-IsSUP              Retry Private KB
-   ↓                      ↓
-Revise if needed   Internet Search Fallback
-   ↓                      ↓
-IsUSE              Grade Web Evidence
-   ↓                      ↓
-Final Answer ← Generate → IsSUP → IsUSE
-        ↓
-SQLite Checkpoint / Memory
+```mermaid
+flowchart TB
+    User["👤 Incident operator"] --> UI["🖥️ Browser interface"]
+    UI -->|"Question + thread ID"| API["⚡ FastAPI"]
+    API --> Graph["🔀 LangGraph: contextualize and route"]
+    Graph --> Direct["💬 Direct answer or no-evidence refusal"]
+    Graph --> Retrieve["📚 Retrieve and grade runbooks"]
+    Retrieve <-->|"Shared namespace"| Vectors[("🌲 Pinecone")]
+    Retrieve --> Generate["📝 Generate, check support and usefulness"]
+    Retrieve -->|"Weak evidence: bounded fallback"| Web["🌐 Tavily search and evidence grading"]
+    Web --> Generate
+    Generate -->|"Bounded revisions / retrieval rewrites"| Retrieve
+    Graph -.-> Models["🧠 OpenAI models"]
+    Generate -.-> Models
+    Graph <-->|"Caller-supplied thread ID"| Memory[("💾 SQLite checkpoints")]
+    Generate --> Result["✅ Answer, sources and trace"]
+    Direct --> Result
+    Result --> API
+    API -->|"Completed result"| Audit[("🗃️ SQLite audit history")]
+    API --> UI
+    Files["📄 Seed runbooks / uploaded documents"] --> Load["✂️ Load and split documents"]
+    Load --> Embed["🔢 OpenAI embeddings"]
+    Embed --> Vectors
+
+    classDef app fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef store fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef service fill:#f3e8ff,stroke:#9333ea,color:#581c87
+    class UI,API,Graph,Direct,Retrieve,Generate,Result,Load app
+    class Vectors,Memory,Audit store
+    class Models,Embed,Web service
 ```
+
+Component overview grounded in `app.py`, `src/self_rag.py`, `src/ingestion.py`
+and `src/db.py`. Retry branches are grouped for readability. External services
+in this diagram are integration points; credential-free tests use doubles.
 
 ## Tech stack
 
@@ -313,9 +321,46 @@ retention, production database recovery and multi-worker behavior remain unverif
 Provider failures can leave intermediate checkpoints, but do not add a completed
 conversation turn; a new invocation resets transient state.
 
-Live OpenAI/Pinecone/Tavily calls, extraction/indexing, browser interaction,
-Docker execution and end-to-end behavior remain unverified. The API
-has no authentication and audit history is shared. See the
-[delivery plan](docs/delivery-plan.md) for the remaining workflow segments.
+Ingestion tests use the real UTF-8, DOCX and PDF loaders (including a two-page
+text-bearing PDF fixture) and real recursive text splitter. They cover metadata,
+800-character chunks and overlap, stable IDs across staging directories, changed
+content IDs, empty extraction without provider calls, directory filtering/order,
+and propagated setup/upsert failures. Index creation, dimension mismatch,
+namespace and retriever configuration use service doubles. A partial-write double
+shows retries reuse IDs; it does not prove Pinecone rollback or deduplication.
+Changing or shortening a document does not delete its older vectors. Same-name,
+same-content documents share IDs by design; there is no document-version catalog.
+
+### Container verification
+
+GitHub Actions builds the runtime image and runs it as UID 10001 with no provider
+keys. The build context allows only runtime files, seed Markdown runbooks and
+source/license attribution. CI plants dummy environment files and verifies they
+are absent in `/app`, checks writable `data/` and `uploads/`, imports the ingestion
+entry point, then starts the actual image with `PORT=8090`. Real HTTP probes check
+health, page, assets and an empty SQLite audit table, including an on-disk query.
+Health is a process probe, not a check of provider connectivity.
+
+Reproduce with a running Docker daemon:
+
+```bash
+docker build -t incident-response:local .
+docker run --rm --name incident-smoke -e PORT=8090 -p 127.0.0.1:8090:8090 incident-response:local
+# In another terminal:
+python3 scripts/smoke_http.py http://127.0.0.1:8090
+```
+
+The smoke script expects a fresh, empty audit database and invokes no providers.
+For persistence, mount writable directories at `/app/data` and `/app/uploads`,
+owned by UID/GID 10001. Pass provider configuration using runtime environment
+variables or `--env-file`; environment files are not packaged in the image.
+Dependencies have broad version ranges, so builds are not locked or reproducible
+across dates. The image uses Python 3.11; Python 3.12 is also tested outside Docker.
+
+Live OpenAI/Pinecone/Tavily calls, real embedding/vector writes, browser interaction
+and deployed end-to-end behavior remain unverified. The API has no authentication
+and audit history is shared. This completes the three planned credential-free
+segments; production controls and live-provider validation remain separate work.
+See the [delivery plan](docs/delivery-plan.md) for scope and limits.
 
 I learned from Bappy Ahmed, whose original work is MIT-licensed, through Krish Naik Academy.
