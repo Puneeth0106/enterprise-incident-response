@@ -57,6 +57,8 @@ def ingest_file(path: Path) -> int:
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     chunks = splitter.split_documents(docs)
+    if not chunks:
+        return 0
 
     for i, chunk in enumerate(chunks):
         chunk.metadata["chunk_index"] = i

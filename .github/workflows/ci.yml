@@ -19,5 +19,46 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pip check
-      - run: python -m compileall -q app.py src tests
+      - run: python -m compileall -q app.py data_ingestion.py src tests scripts
       - run: python -m unittest discover -s tests -v
+  container:
+    name: Container smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build runtime image
+        run: |
+          printf 'must-not-enter-image\n' > .env
+          printf 'must-not-enter-image\n' > .env.production
+          docker build -t incident-response:ci .
+      - name: Verify runtime contents and permissions
+        run: |
+          docker run --rm --entrypoint python incident-response:ci -c '
+          import os
+          from pathlib import Path
+          import data_ingestion
+          assert os.getuid() == 10001
+          assert not list(Path("/app").rglob(".env*"))
+          assert not Path("/app/.git").exists()
+          assert not Path("/app/tests").exists()
+          for name in ("data", "uploads"):
+              probe = Path("/app") / name / "write-probe"
+              probe.write_text("ok")
+              probe.unlink()
+          assert Path("/app/LICENSE").is_file()
+          assert Path("/app/SOURCE.md").is_file()
+          '
+      - name: Probe packaged application without provider keys
+        shell: bash
+        run: |
+          trap 'docker logs incident-smoke; docker rm -f incident-smoke' EXIT
+          docker run -d --name incident-smoke -e PORT=8090 -p 127.0.0.1:8090:8090 incident-response:ci
+          python scripts/smoke_http.py http://127.0.0.1:8090
+          docker exec incident-smoke python -c '
+          import sqlite3
+          from pathlib import Path
+          path = Path("/app/data/audit.db")
+          assert path.is_file()
+          with sqlite3.connect(path) as conn:
+              assert conn.execute("SELECT COUNT(*) FROM rag_audit").fetchone()[0] == 0
+          '
